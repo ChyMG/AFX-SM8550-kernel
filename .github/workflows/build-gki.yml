@@ -14,6 +14,10 @@ on:
         description: "uname -r suffix. Empty = exact reference release (safest). Custom values keep module vermagic pinned to the reference so vendor_dlkm still loads."
         type: string
         default: "+AFX-SM8550"
+      all_builtin:
+        description: "Compile all modules (=m) into the kernel image (monolithic)"
+        type: boolean
+        default: true
       use_kpm:
         description: "Enable KPM"
         type: boolean
@@ -90,6 +94,7 @@ jobs:
           FIRMWARE_NAME: rtl8156b-2.fw
           FORCE_LOCALVERSION: ${{ github.event.inputs.localversion || '+AFX-SM8550' }}
           LTO_MODE: ${{ github.event.inputs.lto || 'thin' }}
+          ALL_BUILTIN: ${{ github.event.inputs.all_builtin || 'true' }}
           # same common commit as the known-good android13-5.15.180-2025-05 boot.img
           KERNEL_COMMIT: 39bd6e622fc6c1224c41cf8ae6c1a78340129cb6
         run: |

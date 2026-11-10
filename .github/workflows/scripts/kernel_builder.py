@@ -514,6 +514,27 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
             with open(build_config, "w") as f:
                 f.write(content)
 
+    def builtin_all_modules(self):
+        """Convert every =m in gki_defconfig to =y so the kernel is monolithic."""
+        flag = os.environ.get("ALL_BUILTIN", "true").lower()
+        if flag not in ("1", "true", "yes"):
+            logger.info("ALL_BUILTIN 未启用，保留模块")
+            return
+
+        config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
+        if not config_file.exists():
+            logger.warning(f"配置文件不存在: {config_file}")
+            return
+
+        lines = config_file.read_text().splitlines()
+        converted = 0
+        for i, line in enumerate(lines):
+            if line.startswith("CONFIG_") and line.endswith("=m"):
+                lines[i] = line[:-2] + "=y"
+                converted += 1
+        config_file.write_text("\n".join(lines) + "\n")
+        logger.info(f"已将 {converted} 个 =m 配置改为 =y (全部内建)")
+
     def _configure_zram(self):
         config_file = self.work_dir / "common/arch/arm64/configs/gki_defconfig"
         with open(config_file, "r") as f:
@@ -896,6 +917,7 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
             self.apply_zram_patches()
             self.apply_task_mmu_fixes()
             self.configure_kernel()
+            self.builtin_all_modules()
             self.configure_kernel_name()
             self.configure_forced_localversion()
             self.show_kernel_config()
