@@ -1,0 +1,82 @@
+name: Build AFX SM8550 kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      lto:
+        description: "LTO mode (full = optimization enabled)"
+        type: choice
+        options:
+          - full
+          - thin
+          - none
+        default: full
+      localversion:
+        description: "Kernel localversion (suffix of uname -r)"
+        type: string
+        default: "+AFX-SM8550"
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    env:
+      LTO_MODE: ${{ github.event.inputs.lto || 'full' }}
+      LOCALVERSION_INPUT: ${{ github.event.inputs.localversion || '+AFX-SM8550' }}
+
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Add 8G swap
+        run: |
+          sudo fallocate -l 8G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          df -h /
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev libncurses-dev dwarves \
+            cpio rsync zstd lz4 kmod python3 xz-utils patch
+
+      - name: Build kernel
+        run: |
+          chmod +x scripts/build.sh
+          ./scripts/build.sh
+          echo "### Kernel build summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- LTO mode: \`${LTO_MODE}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Release: \`$(cat out/include/config/kernel.release)\`" >> "$GITHUB_STEP_SUMMARY"
+          ls -lh dist >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-Image-${{ github.run_number }}-${{ github.event.inputs.lto || 'full' }}
+          path: dist/Image
+          if-no-files-found: error
+
+      - name: Upload full package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-SM8550-${{ github.run_number }}-${{ github.event.inputs.lto || 'full' }}
+          path: dist/AFX-*.tar.gz
+          if-no-files-found: error

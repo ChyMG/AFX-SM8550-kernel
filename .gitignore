@@ -1,0 +1,8 @@
+kernel/
+SukiSU-Ultra/
+susfs4ksu/
+toolchain/
+out/
+dist/
+extra.config
+*.tar.gz
