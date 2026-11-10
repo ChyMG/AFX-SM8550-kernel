@@ -184,5 +184,7 @@ cp "$OUT/System.map" "$DIST/System.map"
 cp "$OUT/.config" "$DIST/config"
 cp "$OUT/Module.symvers" "$DIST/Module.symvers"
 cp "$OUT/vmlinux" "$DIST/vmlinux"
-tar -C "$DIST" --exclude="AFX-${RELEASE}.tar.gz" -czf "$DIST/AFX-${RELEASE}.tar.gz" .
+TARBALL=$WORKDIR/AFX-${RELEASE}.tar.gz
+tar -C "$DIST" -czf "$TARBALL" .
+mv "$TARBALL" "$DIST/AFX-${RELEASE}.tar.gz"
 ls -lh "$DIST"
