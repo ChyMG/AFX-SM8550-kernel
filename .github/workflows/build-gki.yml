@@ -108,7 +108,15 @@ jobs:
       - name: Collect artifacts
         run: |
           mkdir -p artifacts
-          find /tmp/gki-build -type f \( -name "*.img" -o -name "*.zip" \) -exec cp -t artifacts/ {} +
+          # Final boot images / AnyKernel3 zips live directly in the workspace
+          find /tmp/gki-build -maxdepth 2 -type f \( -name "*.img" -o -name "*.zip" \) -exec cp -f {} artifacts/ \;
+          # Uncompressed kernel images
+          find /tmp/gki-build -maxdepth 2 -type f \( -name "Image" -o -name "Image.gz" -o -name "Image.lz4" \) -exec cp -f {} artifacts/ \;
+          # GKI modules built together with this kernel
+          MODDIR=$(find /tmp/gki-build -type d -path "*staging/lib/modules/5.15.180+AFX-SM8550" | head -1)
+          if [ -n "$MODDIR" ]; then
+            tar -C "$(dirname "$MODDIR")" -czf "artifacts/modules-5.15.180+AFX-SM8550.tar.gz" "$(basename "$MODDIR")"
+          fi
           find /tmp/gki-build -path "*include/config/kernel.release" -type f -exec cat {} \; > artifacts/kernel.release || true
           if [ -z "$(ls -A artifacts)" ]; then
             echo "::error::No artifacts were produced"
@@ -117,6 +125,17 @@ jobs:
           cd artifacts
           sha256sum * > SHA256SUMS.txt || true
           ls -la
+
+      - name: Verify boot image version / vermagic
+        run: |
+          BOOT=$(ls artifacts/*-boot.img 2>/dev/null | head -1 || true)
+          if [ -z "$BOOT" ]; then
+            BOOT=$(ls artifacts/boot.img | head -1)
+          fi
+          echo "Checking $BOOT"
+          strings -a "$BOOT" | grep -m1 "Linux version" || true
+          strings -a "$BOOT" | grep -m1 "5.15.180.*SMP preempt" || true
+          cat artifacts/kernel.release 2>/dev/null || true
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
