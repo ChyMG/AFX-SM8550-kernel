@@ -1,0 +1,126 @@
+name: Build AFX GKI SM8550 (SukiSU + SUSFS + KPM)
+
+on:
+  workflow_dispatch:
+    inputs:
+      lto:
+        description: "LTO mode. thin = same as the known-good GKI boot.img; full = aggressive LTO"
+        type: choice
+        options:
+          - thin
+          - full
+        default: thin
+      localversion:
+        description: "uname -r suffix. Empty = exact reference release (safest). Custom values keep module vermagic pinned to the reference so vendor_dlkm still loads."
+        type: string
+        default: "+AFX-SM8550"
+      use_kpm:
+        description: "Enable KPM"
+        type: boolean
+        default: true
+      use_zram:
+        description: "Enable ZRAM (LZ4KD)"
+        type: boolean
+        default: false
+      bbg:
+        description: "Enable Baseband-guard"
+        type: boolean
+        default: false
+      kernelsu_commit:
+        description: "Optional SukiSU commit/tag"
+        type: string
+        default: ""
+      susfs_commit:
+        description: "Optional SUSFS commit"
+        type: string
+        default: ""
+
+jobs:
+  build:
+    # 24.04 keeps the host clang close to the toolchain used for the working
+    # android13-5.15.180 reference boot image. Public repos get 4 vCPU / 16 GB.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ccache python3 git curl wget zip unzip xz-utils openssl pixz \
+            bc bison flex libssl-dev libelf-dev libncurses-dev dwarves \
+            cpio rsync patch
+          pip install PyYAML
+
+      - name: Configure ccache
+        run: |
+          mkdir -p "$HOME/.ccache"
+          ccache --version
+          ccache --max-size=2G
+          ccache --set-config=compression=true
+          echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+
+      - name: Generate AVB signing key
+        run: |
+          openssl genrsa -out "$RUNNER_TEMP/testkey.pem" 2048
+          echo "BOOT_SIGN_KEY_PATH=$RUNNER_TEMP/testkey.pem" >> "$GITHUB_ENV"
+
+      - name: Build GKI kernel and boot image
+        env:
+          EXTRA_KERNEL_CONFIG: ${{ github.workspace }}/config/need.config
+          FIRMWARE_FILE: ${{ github.workspace }}/firmware/rtl_nic/rtl8156b-2.fw
+          FIRMWARE_NAME: rtl8156b-2.fw
+          FORCE_LOCALVERSION: ${{ github.event.inputs.localversion || '+AFX-SM8550' }}
+          LTO_MODE: ${{ github.event.inputs.lto || 'thin' }}
+          # same common commit as the known-good android13-5.15.180-2025-05 boot.img
+          KERNEL_COMMIT: 39bd6e622fc6c1224c41cf8ae6c1a78340129cb6
+        run: |
+          cd .github/workflows/scripts
+          ARGS="--android android13 --kernel 5.15 --sub-level 180 --os-patch 2025-05 --no-release"
+
+          [ "${{ github.event.inputs.use_kpm }}" = "false" ] && ARGS="$ARGS --no-kpm"
+          [ "${{ github.event.inputs.use_zram }}" = "true" ] && ARGS="$ARGS --zram"
+          [ "${{ github.event.inputs.bbg }}" = "true" ] && ARGS="$ARGS --bbg"
+          [ -z "${{ github.event.inputs.kernelsu_commit }}" ] || ARGS="$ARGS --ksu-commit=${{ github.event.inputs.kernelsu_commit }}"
+          [ -z "${{ github.event.inputs.susfs_commit }}" ] || ARGS="$ARGS --susfs-commit=${{ github.event.inputs.susfs_commit }}"
+
+          echo "build.py $ARGS"
+          python3 build.py $ARGS
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          find /tmp/gki-build -type f \( -name "*.img" -o -name "*.zip" \) -exec cp -t artifacts/ {} +
+          find /tmp/gki-build -path "*include/config/kernel.release" -type f -exec cat {} \; > artifacts/kernel.release || true
+          if [ -z "$(ls -A artifacts)" ]; then
+            echo "::error::No artifacts were produced"
+            exit 1
+          fi
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt || true
+          ls -la
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-GKI-SM8550-${{ github.run_number }}-${{ github.event.inputs.lto || 'thin' }}
+          path: artifacts/*
+          if-no-files-found: error
