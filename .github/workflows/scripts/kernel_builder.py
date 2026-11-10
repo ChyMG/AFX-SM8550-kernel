@@ -308,6 +308,60 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
                 self._run_cmd(f"patch -p1 --fuzz=3 < {patch_file}", check=False)
                 self._chdir(self.work_dir)
 
+    def fix_namespace_susfs_hunk(self):
+        """The include/CL_COPY_MNT_NS hunk of the SUSFS patch fails on this
+        ACK snapshot; add the same definitions manually."""
+        logger.info("=== 补全 fs/namespace.c 的 SUSFS 定义 ===")
+        common_dir = self.work_dir / "common"
+        ns = common_dir / "fs/namespace.c"
+        if not ns.exists():
+            return
+
+        text = ns.read_text()
+        changed = False
+
+        if "#include <linux/susfs_def.h>" not in text:
+            include_block = (
+                "#ifdef CONFIG_KSU_SUSFS\n"
+                "#include <linux/susfs_def.h>\n"
+                "#endif // #ifdef CONFIG_KSU_SUSFS\n"
+            )
+            for anchor in (
+                "#include <linux/mnt_idmapping.h>\n",
+                "#include <linux/shmem_fs.h>\n",
+                '#include "pnode.h"\n',
+            ):
+                if anchor in text:
+                    text = text.replace(anchor, anchor + include_block, 1)
+                    changed = True
+                    break
+
+        if "#define CL_COPY_MNT_NS" not in text:
+            block = (
+                "\n#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
+                "extern bool susfs_is_current_ksu_domain(void);\n"
+                "extern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n"
+                "\n#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n"
+                "#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n\n"
+            )
+            marker = "/* Maximum number of mounts in a mount namespace */"
+            if marker in text:
+                text = text.replace(marker, block + marker, 1)
+                changed = True
+            elif "unsigned int sysctl_mount_max" in text:
+                text = text.replace(
+                    "unsigned int sysctl_mount_max",
+                    block + "unsigned int sysctl_mount_max", 1)
+                changed = True
+
+        if changed:
+            ns.write_text(text)
+            logger.info("已补全 fs/namespace.c 的 SUSFS include/宏")
+
+        rej = common_dir / "fs/namespace.c.rej"
+        if rej.exists():
+            rej.unlink()
+
     def apply_sukisu_patches(self):
         logger.info("=== 应用 SukiSU 补丁 ===")
         self._chdir(self.work_dir / "common")
@@ -837,6 +891,7 @@ CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
             self.add_kernelsu()
             self.add_bbg()
             self.apply_susfs_patches()
+            self.fix_namespace_susfs_hunk()
             self.apply_sukisu_patches()
             self.apply_zram_patches()
             self.apply_task_mmu_fixes()
