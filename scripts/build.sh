@@ -19,8 +19,9 @@ log() { echo -e "\n\033[1;34m[$(date +%H:%M:%S)] $*\033[0m"; }
 log "Downloading clang-r450784e"
 mkdir -p "$WORKDIR/toolchain"
 if [ ! -x "$TOOLCHAIN/bin/clang" ]; then
+	mkdir -p "$TOOLCHAIN"
 	curl -fL -o /tmp/clang-r450784e.tar.gz "$CLANG_URL"
-	tar -xzf /tmp/clang-r450784e.tar.gz -C "$WORKDIR/toolchain"
+	tar -xzf /tmp/clang-r450784e.tar.gz -C "$TOOLCHAIN"
 	rm -f /tmp/clang-r450784e.tar.gz
 fi
 "$TOOLCHAIN/bin/clang" --version | head -1
@@ -56,7 +57,7 @@ if ! grep -q 'drivers/kernelsu/Kconfig' "$KERNEL_DIR/drivers/Kconfig"; then
 		"$KERNEL_DIR/drivers/Kconfig"
 fi
 if ! grep -q 'CONFIG_KSU.*kernelsu/' "$KERNEL_DIR/drivers/Makefile"; then
-	sed -i '/^obj-y[[:space:]]*+= xiaomi\/$/i obj-$(CONFIG_KSU)\t\t+= kernelsu/' \
+	sed -i '/^obj-y[[:space:]]*+= xiaomi\/$/i obj-$(CONFIG_KSU) += kernelsu/' \
 		"$KERNEL_DIR/drivers/Makefile"
 fi
 

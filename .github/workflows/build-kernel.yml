@@ -15,9 +15,6 @@ on:
         description: "Kernel localversion (suffix of uname -r)"
         type: string
         default: "+AFX-SM8550"
-  push:
-    branches:
-      - main
 
 jobs:
   build:
