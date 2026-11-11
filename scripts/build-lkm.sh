@@ -104,9 +104,13 @@ grep -q "\"$EXPECTED_RELEASE\"" "$RELEASE_H" || {
 echo "UTS_RELEASE OK: $(cat "$RELEASE_H")"
 
 log "Applying vendor cfg80211/mac80211 CRCs for MT76"
-python3 "$WORKDIR/scripts/extract_exports.py" \
+if ! python3 "$WORKDIR/scripts/extract_exports.py" \
 	"$WORKDIR/vendor/cfg80211.ko" "$WORKDIR/vendor/mac80211.ko" \
-	> /tmp/vendor_exports.txt 2>/tmp/vendor_exports.meta
+	> /tmp/vendor_exports.txt 2>/tmp/vendor_exports.meta; then
+	echo "extract_exports failed:" >&2
+	cat /tmp/vendor_exports.meta >&2
+	exit 1
+fi
 cat /tmp/vendor_exports.meta
 
 python3 - "$KERNEL/Module.symvers" /tmp/vendor_exports.txt <<'PY'

@@ -53,7 +53,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libssl-dev libelf-dev libncurses-dev dwarves \
-            cpio rsync zstd lz4 kmod python3 xz-utils patch curl git
+            cpio rsync zstd lz4 kmod python3 python3-pyelftools xz-utils patch curl git
 
       - name: Build modules
         env:
