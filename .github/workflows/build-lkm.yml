@@ -12,9 +12,13 @@ on:
         type: string
         default: ""
       with_kpm:
-        description: "Build KPM into kernelsu.ko"
+        description: "Build KPM into kernelsu.ko (only if build_ksu is enabled)"
         type: boolean
         default: true
+      build_ksu:
+        description: "Also build kernelsu.ko (target already has it loaded)"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -56,6 +60,7 @@ jobs:
           KERNEL_COMMIT: ${{ github.event.inputs.kernel_commit || 'f4321180a3973d19b626b3eef51871199e4e1fac' }}
           KSU_COMMIT: ${{ github.event.inputs.ksu_commit }}
           WITH_KPM: ${{ github.event.inputs.with_kpm || 'true' }}
+          BUILD_KSU: ${{ github.event.inputs.build_ksu || '0' }}
         run: |
           chmod +x scripts/build-lkm.sh
           ./scripts/build-lkm.sh
@@ -63,8 +68,8 @@ jobs:
       - name: Upload module package
         uses: actions/upload-artifact@v4
         with:
-          name: AFX-LKM-5.15.194-${{ github.run_number }}
+          name: AFX-LKM-5.15.194-vendor-crc-${{ github.run_number }}
           path: |
             dist/*
-            AFX-LKM-5.15.194.tar.gz
+            AFX-LKM-5.15.194-vendor-crc.tar.gz
           if-no-files-found: error
