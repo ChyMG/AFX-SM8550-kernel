@@ -1,0 +1,70 @@
+name: Build AFX LKM modules (5.15.194)
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_commit:
+        description: "kernel/common commit of the running kernel"
+        type: string
+        default: "f4321180a3973d19b626b3eef51871199e4e1fac"
+      ksu_commit:
+        description: "Optional SukiSU commit (empty = latest main)"
+        type: string
+        default: ""
+      with_kpm:
+        description: "Build KPM into kernelsu.ko"
+        type: boolean
+        default: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Maximize build space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Add 8G swap
+        run: |
+          sudo fallocate -l 8G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=8192
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+          df -h /
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev libncurses-dev dwarves \
+            cpio rsync zstd lz4 kmod python3 xz-utils patch curl git
+
+      - name: Build modules
+        env:
+          KERNEL_COMMIT: ${{ github.event.inputs.kernel_commit || 'f4321180a3973d19b626b3eef51871199e4e1fac' }}
+          KSU_COMMIT: ${{ github.event.inputs.ksu_commit }}
+          WITH_KPM: ${{ github.event.inputs.with_kpm || 'true' }}
+        run: |
+          chmod +x scripts/build-lkm.sh
+          ./scripts/build-lkm.sh
+
+      - name: Upload module package
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-LKM-5.15.194-${{ github.run_number }}
+          path: |
+            dist/*
+            AFX-LKM-5.15.194.tar.gz
+          if-no-files-found: error
