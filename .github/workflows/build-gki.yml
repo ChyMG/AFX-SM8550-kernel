@@ -18,6 +18,10 @@ on:
         description: "Compile all modules (=m) into the kernel image (monolithic)"
         type: boolean
         default: true
+      use_need_config:
+        description: "Apply config/need.config (USB serial, IPSet, MT76, firmware)"
+        type: boolean
+        default: true
       use_kpm:
         description: "Enable KPM"
         type: boolean
@@ -89,15 +93,22 @@ jobs:
 
       - name: Build GKI kernel and boot image
         env:
-          EXTRA_KERNEL_CONFIG: ${{ github.workspace }}/config/need.config
-          FIRMWARE_FILE: ${{ github.workspace }}/firmware/rtl_nic/rtl8156b-2.fw
+          USE_NEED_CONFIG: ${{ github.event.inputs.use_need_config || 'true' }}
           FIRMWARE_NAME: rtl8156b-2.fw
-          FORCE_LOCALVERSION: ${{ github.event.inputs.localversion || '+AFX-SM8550' }}
+          LOCALVERSION_INPUT: ${{ github.event.inputs.localversion }}
           LTO_MODE: ${{ github.event.inputs.lto || 'thin' }}
           ALL_BUILTIN: ${{ github.event.inputs.all_builtin || 'true' }}
           # same common commit as the known-good android13-5.15.180-2025-05 boot.img
           KERNEL_COMMIT: 39bd6e622fc6c1224c41cf8ae6c1a78340129cb6
         run: |
+          export EXTRA_KERNEL_CONFIG=""
+          export FIRMWARE_FILE=""
+          if [ "$USE_NEED_CONFIG" = "true" ]; then
+            export EXTRA_KERNEL_CONFIG="$GITHUB_WORKSPACE/config/need.config"
+            export FIRMWARE_FILE="$GITHUB_WORKSPACE/firmware/rtl_nic/rtl8156b-2.fw"
+          fi
+          export FORCE_LOCALVERSION="$LOCALVERSION_INPUT"
+
           cd .github/workflows/scripts
           ARGS="--android android13 --kernel 5.15 --sub-level 180 --os-patch 2025-05 --no-release"
 
