@@ -26,11 +26,32 @@ log() { echo -e "\n\033[1;34m[$(date +%H:%M:%S)] $*\033[0m"; }
 
 log "Downloading clang-r450784e"
 mkdir -p "$WORKDIR/toolchain"
+download_clang() {
+	for i in 1 2 3 4 5; do
+		if curl -fL --retry 3 --retry-all-errors -o /tmp/clang-r450784e.tar.gz "$CLANG_URL" &&
+		   tar -tzf /tmp/clang-r450784e.tar.gz >/dev/null 2>&1; then
+			return 0
+		fi
+		rm -f /tmp/clang-r450784e.tar.gz
+		sleep 5
+	done
+	return 1
+}
 if [ ! -x "$TOOLCHAIN/bin/clang" ]; then
 	mkdir -p "$TOOLCHAIN"
-	curl -fL -o /tmp/clang-r450784e.tar.gz "$CLANG_URL"
-	tar -xzf /tmp/clang-r450784e.tar.gz -C "$TOOLCHAIN"
-	rm -f /tmp/clang-r450784e.tar.gz
+	if download_clang; then
+		tar -xzf /tmp/clang-r450784e.tar.gz -C "$TOOLCHAIN"
+		rm -f /tmp/clang-r450784e.tar.gz
+	else
+		echo "gitiles archive failed; falling back to sparse git clone" >&2
+		rm -rf "$WORKDIR/toolchain/clang-repo"
+		git clone --depth=1 --filter=blob:none --sparse \
+			-b android-gs-bluejay-5.10-android13 \
+			https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
+			"$WORKDIR/toolchain/clang-repo"
+		(cd "$WORKDIR/toolchain/clang-repo" && git sparse-checkout set clang-r450784e)
+		TOOLCHAIN="$WORKDIR/toolchain/clang-repo/clang-r450784e"
+	fi
 fi
 export PATH="$TOOLCHAIN/bin:$PATH"
 "$TOOLCHAIN/bin/clang" --version | head -1
