@@ -131,7 +131,7 @@ open(symvers, "w").write("\n".join(out) + "\n")
 PY
 
 # Force modpost to regenerate MT76's __versions with the vendor CRCs.
-find "$KERNEL/drivers/net/wireless/mediatek/mt76" -maxdepth 1 \
+find "$KERNEL/drivers/net/wireless/mediatek/mt76" \
 	\( -name '*.ko' -o -name '*.mod' -o -name '*.mod.c' -o -name '*.mod.o' \) -delete
 make "${MAKE_ARGS[@]}" -j"$JOBS" modules
 
@@ -149,7 +149,7 @@ want = {
     "ieee80211_register_hw": "0x3726616f",
 }
 found = {}
-for path in glob.glob("kernel/drivers/net/wireless/mediatek/mt76/*.mod.c"):
+for path in glob.glob("kernel/drivers/net/wireless/mediatek/mt76/**/*.mod.c", recursive=True):
     text = open(path).read()
     for m in re.finditer(r'\{\s*(0x[0-9a-fA-F]+)\s*,\s*"([^"]+)"\s*\}', text):
         crc, name = m.group(1), m.group(2)
@@ -223,7 +223,11 @@ load() {
 # MT76 depends on the already-loaded cfg80211/mac80211
 load mt76.ko
 load mt76-usb.ko
+load mt76x02-lib.ko
+load mt76x02-usb.ko
+load mt76x0-common.ko
 load mt76x0u.ko
+load mt76x2-common.ko
 load mt76x2u.ko
 
 # USB serial
