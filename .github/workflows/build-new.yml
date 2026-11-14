@@ -11,6 +11,10 @@ on:
         description: "CONFIG_DEFAULT_HOSTNAME"
         type: string
         default: "SM8550"
+      common_tag:
+        description: "ACK common ref/tag (5.15.78: android13-5.15-2023-02_r1; 5.15.194: android13-5.15)"
+        type: string
+        default: "android13-5.15-2023-02_r1"
       boot_partition_size:
         description: "boot.img size in bytes (factory boot partition is 100663296 = 96 MiB)"
         type: string
@@ -49,6 +53,7 @@ jobs:
           LOCALVERSION_INPUT: ${{ github.event.inputs.localversion || '-AFX-MiSM8550' }}
           HOSTNAME_INPUT: ${{ github.event.inputs.hostname || 'SM8550' }}
           BOOT_PARTITION_SIZE: ${{ github.event.inputs.boot_partition_size || '100663296' }}
+          COMMON_TAG: ${{ github.event.inputs.common_tag || 'android13-5.15-2023-02_r1' }}
         run: bash scripts/build-new.sh
 
       - name: Upload artifacts

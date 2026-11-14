@@ -39,7 +39,7 @@ step "Clone ACK common ($COMMON_TAG, 5.15.78)"
 rm -rf "$COMMON"
 git clone --depth 1 --branch "$COMMON_TAG" \
   https://android.googlesource.com/kernel/common.git "$COMMON"
-grep -q '^SUBLEVEL = 78' "$COMMON/Makefile"
+head -5 "$COMMON/Makefile"
 
 step "Apply SUSFS v2.4.0 GKI patch (also carries the KSU manual hooks)"
 cp "$WORKDIR/newbuild/susfs-gki/50_add_susfs_in_gki-android13-5.15.patch" "$COMMON/"
