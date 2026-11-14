@@ -70,6 +70,16 @@ if find "$COMMON" -name '*.rej' | grep -q .; then
   exit 1
 fi
 find "$COMMON" -name '*.orig' -delete
+# 5.15.78 predates VMA_PAD_START; SUSFS uses it in task_mmu.c.
+python3 - "$COMMON/fs/proc/task_mmu.c" <<'PYVMA'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+if 'VMA_PAD_START' in s and '#define VMA_PAD_START' not in s:
+    s = s.replace('#include <linux/pkeys.h>\n',
+                  '#include <linux/pkeys.h>\n#ifndef VMA_PAD_START\n#define VMA_PAD_START(vma) ((vma)->vm_end)\n#endif\n', 1)
+open(p, 'w').write(s)
+PYVMA
 
 step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
 rm -rf "$COMMON/drivers/kernelsu"
