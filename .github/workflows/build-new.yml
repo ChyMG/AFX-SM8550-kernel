@@ -42,7 +42,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             bc bison flex libssl-dev libelf-dev libncurses-dev cpio rsync \
-            python3 xz-utils zstd lz4 kmod patch git curl
+            python3 xz-utils zstd lz4 kmod dwarves patch git curl
 
       - name: Build kernel and boot.img
         env:

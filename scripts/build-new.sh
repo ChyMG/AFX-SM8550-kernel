@@ -100,9 +100,10 @@ CONFIG_KSU_SUSFS=y
 CONFIG_KALLSYMS=y
 CONFIG_KALLSYMS_ALL=y
 CONFIG_KPM=y
-# CONFIG_DEBUG_INFO is not set
-# CONFIG_DEBUG_INFO_BTF is not set
-# CONFIG_DEBUG_INFO_BTF_MODULES is not set
+CONFIG_DEBUG_INFO=y
+CONFIG_DEBUG_INFO_DWARF4=y
+CONFIG_DEBUG_INFO_BTF=y
+CONFIG_DEBUG_INFO_BTF_MODULES=y
 # CONFIG_TRIM_UNUSED_KSYMS is not set
 # CONFIG_UNUSED_KSYMS_WHITELIST is not set
 EOF
@@ -166,6 +167,11 @@ if [ -n "$DIST" ] && [ -f "$DIST/Image" ]; then IMAGE="$DIST/Image"; fi
 echo "Image: $IMAGE ($(stat -c%s "$IMAGE") bytes)"
 [ -n "$RELEASE_FILE" ] && echo "kernel.release: $(cat "$RELEASE_FILE")" || true
 [ -n "$SYMVERS" ] && grep -m1 module_layout "$SYMVERS" || true
+if [ -f "$WORKDIR/newbuild/ref/qcom_edac.ko" ] && [ -n "$SYMVERS" ]; then
+  OUR_ML=$(awk '$2=="module_layout"{print $1; exit}' "$SYMVERS")
+  REF_ML=$(modprobe --dump-modversions "$WORKDIR/newbuild/ref/qcom_edac.ko" 2>/dev/null | awk '$2=="module_layout"{print $1; exit}')
+  echo "module_layout ours=$OUR_ML ref=$REF_ML"
+fi
 
 step "Create boot.img (header v4, kernel-only, pad to factory partition size)"
 if [ ! -d "$WORKDIR/tools/mkbootimg/.git" ]; then
