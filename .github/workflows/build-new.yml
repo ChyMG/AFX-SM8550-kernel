@@ -1,0 +1,54 @@
+name: Build AFX vermeer kernel (new build system)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_string:
+        description: "uname -r string (spoofed; internal UTS release stays 5.15.78 for vendor module vermagic)"
+        type: string
+        default: "5.15.78-AFX-zzz-k-suffix"
+      boot_partition_size:
+        description: "boot.img size in bytes (factory boot partition is 100663296 = 96 MiB)"
+        type: string
+        default: "100663296"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout build scripts and patches
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev libncurses-dev cpio rsync \
+            python3 xz-utils zstd lz4 kmod patch git curl
+
+      - name: Build kernel and boot.img
+        env:
+          RELEASE_STRING: ${{ github.event.inputs.release_string || '5.15.78-AFX-zzz-k-suffix' }}
+          BOOT_PARTITION_SIZE: ${{ github.event.inputs.boot_partition_size || '100663296' }}
+        run: bash scripts/build-new.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-vermeer-newbuild-${{ github.run_number }}
+          path: artifacts/*
+          if-no-files-found: error

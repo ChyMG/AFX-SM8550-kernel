@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Xiaomi hardware id (source not published in this trim)
+#
+
+config MI_HARDWARE_ID
+	tristate "Xiaomi hardware id"
+	default n
+	help
+	  Placeholder for the Xiaomi hardware id driver. The implementation
+	  is not included in the published kernel source.
