@@ -69,6 +69,15 @@ mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
 BUILD_CONFIG=msm-kernel/build.config.afx build/build.sh
 
+step "Install matching kernel modules"
+OUT="$WORKDIR/out/android13-5.15/msm-kernel"
+rm -rf "$WORKDIR/modules_stage"
+PATH="$CLANG/bin:$PATH" make -C "$KERNEL" O="$OUT" ARCH=arm64 LLVM=1 LLVM_IAS=1 \
+  DEPMOD=depmod INSTALL_MOD_PATH="$WORKDIR/modules_stage" INSTALL_MOD_STRIP=1 modules_install
+mkdir -p "$WORKDIR/artifacts"
+tar -C "$WORKDIR/modules_stage" -czf "$WORKDIR/artifacts/modules-5.15.78.tar.gz" lib/modules
+cp "$OUT/Module.symvers" "$WORKDIR/artifacts/Module.symvers"
+
 step "Verify kernel release / spoofed uname"
 RELEASE_FILE="$WORKDIR/out/android13-5.15/msm-kernel/include/config/kernel.release"
 cat "$RELEASE_FILE"
