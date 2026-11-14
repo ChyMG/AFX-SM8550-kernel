@@ -1,0 +1,4 @@
+#!/bin/sh
+# Minimal stand-in for AOSP soong_zip. test_mappings.zip is not needed for
+# the kernel Image or boot.img, so succeed without producing it.
+exit 0

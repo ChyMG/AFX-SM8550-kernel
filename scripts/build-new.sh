@@ -7,6 +7,7 @@ CLANG=$WORKDIR/prebuilts/clang/host/linux-x86/clang-r450784e
 RELEASE_STRING=${RELEASE_STRING:-5.15.78-AFX-zzz-k-suffix}
 BOOT_PARTITION_SIZE=${BOOT_PARTITION_SIZE:-100663296}
 KSU_COMMIT=de9bc7e6
+export PATH="$WORKDIR/newbuild/tools:$PATH"
 
 step() { echo -e "\n\033[1;34m[$(date +%H:%M:%S)] $*\033[0m"; }
 
