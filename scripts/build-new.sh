@@ -84,13 +84,16 @@ PYVMA
 # Keep struct module identical to a BTF_MODULES=y build so module_layout CRC
 # still matches vendor modules, without paying for debug info in full LTO.
 python3 - "$COMMON/include/linux/module.h" <<'PYBTF'
-import sys
+import sys, re
 p = sys.argv[1]
 s = open(p).read()
-old = "#ifdef CONFIG_DEBUG_INFO_BTF_MODULES\n\tunsigned int btf_data_size;\n#endif"
-if old in s:
-    s = s.replace(old, "\tunsigned int btf_data_size;", 1)
-    open(p, 'w').write(s)
+# 5.15.194 has: btf_data_size + btf_data under this ifdef; older has only one.
+s2, n = re.subn(r'#ifdef CONFIG_DEBUG_INFO_BTF_MODULES\n((?:\t[^\n]*\n)+?)#endif\n', r'\1', s, count=1)
+if n:
+    open(p, 'w').write(s2)
+    print("module.h: made BTF fields unconditional")
+else:
+    print("module.h: BTF ifdef not found (already unconditional?)")
 PYBTF
 
 step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
