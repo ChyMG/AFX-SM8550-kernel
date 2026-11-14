@@ -107,6 +107,10 @@ CONFIG_DEBUG_INFO_BTF_MODULES=y
 CONFIG_LTO_CLANG_FULL=y
 # CONFIG_LTO_CLANG_THIN is not set
 # CONFIG_LTO_NONE is not set
+# CONFIG_KASAN is not set
+# CONFIG_KFENCE is not set
+# CONFIG_UBSAN is not set
+# CONFIG_KCSAN is not set
 # CONFIG_TRIM_UNUSED_KSYMS is not set
 # CONFIG_UNUSED_KSYMS_WHITELIST is not set
 EOF
@@ -150,6 +154,7 @@ step "Build GKI Image with build/build.sh (new build system)"
 mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
 export LOCALVERSION=
+export MAKEFLAGS="-j2"
 set +e
 BUILD_CONFIG=common/build.config.gki.aarch64 \
 BUILD_CONFIG_FRAGMENTS=newbuild/configs/gki-build.fragment \
