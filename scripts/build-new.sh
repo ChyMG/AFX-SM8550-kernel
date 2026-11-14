@@ -81,6 +81,18 @@ if 'VMA_PAD_START' in s and '#define VMA_PAD_START' not in s:
 open(p, 'w').write(s)
 PYVMA
 
+# Keep struct module identical to a BTF_MODULES=y build so module_layout CRC
+# still matches vendor modules, without paying for debug info in full LTO.
+python3 - "$COMMON/include/linux/module.h" <<'PYBTF'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+old = "#ifdef CONFIG_DEBUG_INFO_BTF_MODULES\n\tunsigned int btf_data_size;\n#endif"
+if old in s:
+    s = s.replace(old, "\tunsigned int btf_data_size;", 1)
+    open(p, 'w').write(s)
+PYBTF
+
 step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
 rm -rf "$COMMON/drivers/kernelsu"
 ln -sfn ../../newbuild/SukiSU/kernelsu "$COMMON/drivers/kernelsu"
@@ -100,10 +112,9 @@ CONFIG_KSU_SUSFS=y
 CONFIG_KALLSYMS=y
 CONFIG_KALLSYMS_ALL=y
 CONFIG_KPM=y
-CONFIG_DEBUG_INFO=y
-CONFIG_DEBUG_INFO_DWARF4=y
-CONFIG_DEBUG_INFO_BTF=y
-CONFIG_DEBUG_INFO_BTF_MODULES=y
+# CONFIG_DEBUG_INFO is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+# CONFIG_DEBUG_INFO_BTF_MODULES is not set
 CONFIG_LTO_CLANG_FULL=y
 # CONFIG_LTO_CLANG_THIN is not set
 # CONFIG_LTO_NONE is not set
@@ -154,7 +165,7 @@ step "Build GKI Image with build/build.sh (new build system)"
 mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
 export LOCALVERSION=
-export MAKEFLAGS="-j2"
+export MAKEFLAGS="-j4"
 set +e
 BUILD_CONFIG=common/build.config.gki.aarch64 \
 BUILD_CONFIG_FRAGMENTS=newbuild/configs/gki-build.fragment \
