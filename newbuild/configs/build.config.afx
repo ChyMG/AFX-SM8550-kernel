@@ -19,7 +19,7 @@ function afx_merge_config() {
   set -x
   "${K}/scripts/kconfig/merge_config.sh" -m -O "${OUT_DIR}" "${OUT_DIR}/.config" \
     "${K}/arch/arm64/configs/vendor/vermeer_GKI.config" \
-    "${ROOT_DIR}/newbuild/configs/need.config" "${ROOT_DIR}/newbuild/configs/extra.config"
+    "${ROOT_DIR}/newbuild/configs/need.config" "${ROOT_DIR}/newbuild/configs/afx_extra.config"
   ( cd "${OUT_DIR}" && make ${TOOL_ARGS} O="${OUT_DIR}" olddefconfig )
 }
 POST_DEFCONFIG_CMDS="afx_merge_config"
