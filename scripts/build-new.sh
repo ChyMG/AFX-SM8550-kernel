@@ -47,7 +47,29 @@ cp "$WORKDIR/newbuild/susfs-gki/fs/susfs.c" "$COMMON/fs/susfs.c"
 cp "$WORKDIR/newbuild/susfs-gki/include/linux/susfs.h" \
    "$WORKDIR/newbuild/susfs-gki/include/linux/susfs_def.h" "$COMMON/include/linux/"
 ( cd "$COMMON" && patch -p1 --batch --forward --fuzz=3 \
-    < "$WORKDIR/newbuild/susfs-gki/50_add_susfs_in_gki-android13-5.15.patch" )
+    < "$WORKDIR/newbuild/susfs-gki/50_add_susfs_in_gki-android13-5.15.patch" ) || true
+
+# This ACK tag has no <trace/hooks/blk.h>, so the first fs/namespace.c hunk
+# rejects. Insert the same block using a 5.15.78-compatible anchor.
+python3 - "$COMMON/fs/namespace.c" <<'PYFIX'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+if '#include <linux/susfs_def.h>' not in s:
+    s = s.replace('#include <linux/mnt_idmapping.h>\n',
+                  '#include <linux/mnt_idmapping.h>\n#ifdef CONFIG_KSU_SUSFS\n#include <linux/susfs_def.h>\n#endif\n', 1)
+if '#define CL_COPY_MNT_NS' not in s:
+    s = s.replace('/* Maximum number of mounts in a mount namespace */',
+                  '#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\nextern bool susfs_is_current_ksu_domain(void);\nextern struct static_key_true susfs_is_sdcard_android_data_not_decrypted;\n\n#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */\n#endif\n\n/* Maximum number of mounts in a mount namespace */', 1)
+open(p, 'w').write(s)
+PYFIX
+rm -f "$COMMON/fs/namespace.c.rej"
+if find "$COMMON" -name '*.rej' | grep -q .; then
+  echo "Unhandled rejected hunks:" >&2
+  find "$COMMON" -name '*.rej' >&2
+  exit 1
+fi
+find "$COMMON" -name '*.orig' -delete
 
 step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
 rm -rf "$COMMON/drivers/kernelsu"
