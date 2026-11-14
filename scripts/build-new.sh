@@ -2,14 +2,16 @@
 set -euo pipefail
 
 WORKDIR=$PWD
-KERNEL=$WORKDIR/msm-kernel
+COMMON=$WORKDIR/common
 CLANG=$WORKDIR/prebuilts/clang/host/linux-x86/clang-r450784e
-RELEASE_STRING=${RELEASE_STRING:-5.15.78-AFX-zzz-k-suffix}
+LOCALVERSION_INPUT=${LOCALVERSION_INPUT:--AFX-MiSM8550}
+HOSTNAME_INPUT=${HOSTNAME_INPUT:-SM8550}
 BOOT_PARTITION_SIZE=${BOOT_PARTITION_SIZE:-100663296}
-KSU_COMMIT=de9bc7e6
-export PATH="$WORKDIR/newbuild/tools:$PATH"
+COMMON_TAG=${COMMON_TAG:-android13-5.15-2023-02_r1}
 
 step() { echo -e "\n\033[1;34m[$(date +%H:%M:%S)] $*\033[0m"; }
+
+export PATH="$WORKDIR/newbuild/tools:$PATH"
 
 step "Clone kernel/build (Android build.config / build.sh system)"
 if [ ! -d "$WORKDIR/build/kernel/.git" ]; then
@@ -33,58 +35,87 @@ if [ ! -x "$CLANG/bin/clang" ]; then
 fi
 "$CLANG/bin/clang" --version | head -1
 
-step "Clone Xiaomi kernel source (bsp-vermeer-t-oss)"
-if [ ! -d "$KERNEL/.git" ]; then
-  git clone --depth 1 -b bsp-vermeer-t-oss \
-    https://github.com/MiCode/Xiaomi_Kernel_OpenSource.git "$KERNEL"
-fi
+step "Clone ACK common ($COMMON_TAG, 5.15.78)"
+rm -rf "$COMMON"
+git clone --depth 1 --branch "$COMMON_TAG" \
+  https://android.googlesource.com/kernel/common.git "$COMMON"
+grep -q '^SUBLEVEL = 78' "$COMMON/Makefile"
 
-step "Apply AFX hooks + SUSFS + uname spoof patch"
-git -C "$KERNEL" apply "$WORKDIR/newbuild/patches/afx-hooks-susfs-uname.patch"
-cp "$WORKDIR/newbuild/susfs/fs/susfs.c" "$KERNEL/fs/susfs.c"
-cp "$WORKDIR/newbuild/susfs/include/linux/susfs.h" \
-   "$WORKDIR/newbuild/susfs/include/linux/susfs_def.h" "$KERNEL/include/linux/"
-mkdir -p "$KERNEL/drivers/misc/hwid"
-cp "$WORKDIR/newbuild/stubs/hwid/"* "$KERNEL/drivers/misc/hwid/"
+step "Apply SUSFS v2.4.0 GKI patch (also carries the KSU manual hooks)"
+cp "$WORKDIR/newbuild/susfs-gki/50_add_susfs_in_gki-android13-5.15.patch" "$COMMON/"
+cp "$WORKDIR/newbuild/susfs-gki/fs/susfs.c" "$COMMON/fs/susfs.c"
+cp "$WORKDIR/newbuild/susfs-gki/include/linux/susfs.h" \
+   "$WORKDIR/newbuild/susfs-gki/include/linux/susfs_def.h" "$COMMON/include/linux/"
+( cd "$COMMON" && patch -p1 --batch --forward --fuzz=3 \
+    < "$WORKDIR/newbuild/susfs-gki/50_add_susfs_in_gki-android13-5.15.patch" )
 
-step "Integrate SukiSU-Ultra builtin (vendored $KSU_COMMIT)"
-rm -rf "$KERNEL/drivers/kernelsu"
-ln -sfn ../../newbuild/SukiSU/kernelsu "$KERNEL/drivers/kernelsu"
+step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
+rm -rf "$COMMON/drivers/kernelsu"
+ln -sfn ../../newbuild/SukiSU/kernelsu "$COMMON/drivers/kernelsu"
+grep -q 'source "drivers/kernelsu/Kconfig"' "$COMMON/drivers/Kconfig" || \
+  sed -i '/^endmenu/i source "drivers/kernelsu/Kconfig"' "$COMMON/drivers/Kconfig"
+grep -q 'drivers/kernelsu/Kconfig' "$COMMON/drivers/Kconfig"
+grep -q 'kernelsu/' "$COMMON/drivers/Makefile" || \
+  printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> "$COMMON/drivers/Makefile"
 
-step "Set uname -r string: $RELEASE_STRING"
-python3 - "$KERNEL/kernel/sys.c" "$RELEASE_STRING" <<'PY'
-import sys
-path, wanted = sys.argv[1], sys.argv[2]
-src = open(path).read()
-old = 'strscpy(tmp.release, "5.15.78-AFX-zzz-k-suffix", sizeof(tmp.release));'
-new = 'strscpy(tmp.release, "%s", sizeof(tmp.release));' % wanted
-if old not in src:
-    raise SystemExit("uname spoof anchor not found in kernel/sys.c")
-open(path, "w").write(src.replace(old, new, 1))
-PY
+step "Write config overrides (localversion=$LOCALVERSION_INPUT, hostname=$HOSTNAME_INPUT)"
+cat > "$WORKDIR/newbuild/configs/gki-override.config" <<EOF
+CONFIG_LOCALVERSION="$LOCALVERSION_INPUT"
+# CONFIG_LOCALVERSION_AUTO is not set
+CONFIG_DEFAULT_HOSTNAME="$HOSTNAME_INPUT"
+CONFIG_KSU=y
+CONFIG_KSU_SUSFS=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+CONFIG_KPM=y
+# CONFIG_DEBUG_INFO is not set
+# CONFIG_DEBUG_INFO_BTF is not set
+# CONFIG_DEBUG_INFO_BTF_MODULES is not set
+EOF
 
-step "Install build config and build with build/build.sh (new build system)"
-cp "$WORKDIR/newbuild/configs/build.config.afx" "$KERNEL/build.config.afx"
+step "Write build.sh fragment"
+cat > "$WORKDIR/newbuild/configs/gki-build.fragment" <<'EOF'
+MAKE_GOALS="Image"
+FILES="arch/arm64/boot/Image vmlinux System.map"
+KMI_SYMBOL_LIST_STRICT_MODE=0
+KMI_ENFORCED=0
+TRIM_NONLISTED_KMI=0
+BUILD_GKI_ARTIFACTS=
+BUILD_GKI_CERTIFICATION_TOOLS=
+BUILD_SYSTEM_DLKM=0
+LTO=thin
+NDK_TRIPLE=
+HERMETIC_TOOLCHAIN=0
+CLANG_PREBUILT_BIN=prebuilts/clang/host/linux-x86/clang-r450784e/bin
+KLEAF_SUPPRESS_BUILD_SH_DEPRECATION_WARNING=1
+function afx_gki_config() {
+  local K="${ROOT_DIR}/${KERNEL_DIR}"
+  set -x
+  "${K}/scripts/kconfig/merge_config.sh" -m -O "${OUT_DIR}" "${OUT_DIR}/.config" \
+    "${ROOT_DIR}/newbuild/configs/device-gki.config" \
+    "${ROOT_DIR}/newbuild/configs/gki-override.config"
+  ( cd "${OUT_DIR}" && make ${TOOL_ARGS} O="${OUT_DIR}" olddefconfig )
+}
+POST_DEFCONFIG_CMDS="afx_gki_config"
+EOF
+
+step "Build GKI Image with build/build.sh (new build system)"
 mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
-BUILD_CONFIG=msm-kernel/build.config.afx build/build.sh
+BUILD_CONFIG=common/build.config.gki.aarch64 \
+BUILD_CONFIG_FRAGMENTS=newbuild/configs/gki-build.fragment \
+build/build.sh
 
-step "Install matching kernel modules"
-OUT="$WORKDIR/out/android13-5.15/msm-kernel"
-rm -rf "$WORKDIR/modules_stage"
-PATH="$CLANG/bin:$PATH" make -C "$KERNEL" O="$OUT" ARCH=arm64 LLVM=1 LLVM_IAS=1 \
-  DEPMOD=depmod INSTALL_MOD_PATH="$WORKDIR/modules_stage" INSTALL_MOD_STRIP=1 modules_install
-mkdir -p "$WORKDIR/artifacts"
-tar -C "$WORKDIR/modules_stage" -czf "$WORKDIR/artifacts/modules-5.15.78.tar.gz" lib/modules
-cp "$OUT/Module.symvers" "$WORKDIR/artifacts/Module.symvers"
-
-step "Verify kernel release / spoofed uname"
-RELEASE_FILE="$WORKDIR/out/android13-5.15/msm-kernel/include/config/kernel.release"
-cat "$RELEASE_FILE"
+OUT="$WORKDIR/out/android13-5.15/common"
+RELEASE_FILE="$OUT/include/config/kernel.release"
 DIST=$(find "$WORKDIR/out" -maxdepth 3 -type d -name dist | head -1)
 [ -n "$DIST" ] && [ -f "$DIST/Image" ] || { echo "Image not found under $WORKDIR/out" >&2; exit 1; }
+
+step "Verify release / module_layout CRC"
+echo "kernel.release: $(cat "$RELEASE_FILE")"
 strings -a "$DIST/Image" | grep -m1 "Linux version"
-strings -a "$DIST/Image" | grep -m1 -- "$RELEASE_STRING"
+strings -a "$DIST/Image" | grep -m1 -- "$(cat "$RELEASE_FILE")"
+grep -m1 "module_layout" "$OUT/Module.symvers" || true
 
 step "Create boot.img (header v4, kernel-only, pad to factory partition size)"
 if [ ! -d "$WORKDIR/tools/mkbootimg/.git" ]; then
@@ -101,7 +132,8 @@ mkdir -p "$WORKDIR/artifacts"
 cp "$DIST/Image" "$WORKDIR/artifacts/Image"
 cp "$WORKDIR/boot-AFX.img" "$WORKDIR/artifacts/boot-AFX.img"
 cp "$RELEASE_FILE" "$WORKDIR/artifacts/kernel.release"
-cp "$WORKDIR/out/android13-5.15/msm-kernel/.config" "$WORKDIR/artifacts/config"
+cp "$OUT/.config" "$WORKDIR/artifacts/config"
 [ -f "$DIST/System.map" ] && cp "$DIST/System.map" "$WORKDIR/artifacts/System.map" || true
+cp "$OUT/Module.symvers" "$WORKDIR/artifacts/Module.symvers"
 sha256sum "$WORKDIR/artifacts/"* > "$WORKDIR/artifacts/SHA256SUMS.txt"
 ls -lh "$WORKDIR/artifacts"
