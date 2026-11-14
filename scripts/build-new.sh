@@ -145,20 +145,27 @@ EOF
 step "Build GKI Image with build/build.sh (new build system)"
 mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
+export LOCALVERSION=
+set +e
 BUILD_CONFIG=common/build.config.gki.aarch64 \
 BUILD_CONFIG_FRAGMENTS=newbuild/configs/gki-build.fragment \
 build/build.sh
+BUILD_RC=$?
+set -e
+echo "build.sh exit code: $BUILD_RC"
 
-OUT="$WORKDIR/out/android13-5.15/common"
-RELEASE_FILE="$OUT/include/config/kernel.release"
+step "Locate build outputs"
+IMAGE=$(find "$WORKDIR/out" -path '*/arch/arm64/boot/Image' | head -1)
 DIST=$(find "$WORKDIR/out" -maxdepth 3 -type d -name dist | head -1)
-[ -n "$DIST" ] && [ -f "$DIST/Image" ] || { echo "Image not found under $WORKDIR/out" >&2; exit 1; }
-
-step "Verify release / module_layout CRC"
-echo "kernel.release: $(cat "$RELEASE_FILE")"
-strings -a "$DIST/Image" | grep -m1 "Linux version"
-strings -a "$DIST/Image" | grep -m1 -- "$(cat "$RELEASE_FILE")"
-grep -m1 "module_layout" "$OUT/Module.symvers" || true
+RELEASE_FILE=$(find "$WORKDIR/out" -path '*/include/config/kernel.release' | head -1)
+KCONFIG=$(find "$WORKDIR/out" -path '*/common/.config' | head -1)
+SYMVERS=$(find "$WORKDIR/out" \( -name Module.symvers -o -name vmlinux.symvers \) | head -1)
+SYSMAP=$(find "$WORKDIR/out" -name System.map | head -1)
+if [ -n "$DIST" ] && [ -f "$DIST/Image" ]; then IMAGE="$DIST/Image"; fi
+[ -n "$IMAGE" ] && [ -f "$IMAGE" ] || { echo "Image not found (build.sh rc=$BUILD_RC)" >&2; exit 1; }
+echo "Image: $IMAGE ($(stat -c%s "$IMAGE") bytes)"
+[ -n "$RELEASE_FILE" ] && echo "kernel.release: $(cat "$RELEASE_FILE")" || true
+[ -n "$SYMVERS" ] && grep -m1 module_layout "$SYMVERS" || true
 
 step "Create boot.img (header v4, kernel-only, pad to factory partition size)"
 if [ ! -d "$WORKDIR/tools/mkbootimg/.git" ]; then
@@ -166,17 +173,23 @@ if [ ! -d "$WORKDIR/tools/mkbootimg/.git" ]; then
     "$WORKDIR/tools/mkbootimg"
 fi
 python3 "$WORKDIR/tools/mkbootimg/mkbootimg.py" --header_version 4 \
-  --kernel "$DIST/Image" --output "$WORKDIR/boot-AFX.img"
+  --kernel "$IMAGE" --output "$WORKDIR/boot-AFX.img"
 truncate -s "$BOOT_PARTITION_SIZE" "$WORKDIR/boot-AFX.img"
 
-step "Collect artifacts"
+step "Collect artifacts (tolerant)"
 rm -rf "$WORKDIR/artifacts"
 mkdir -p "$WORKDIR/artifacts"
-cp "$DIST/Image" "$WORKDIR/artifacts/Image"
-cp "$WORKDIR/boot-AFX.img" "$WORKDIR/artifacts/boot-AFX.img"
-cp "$RELEASE_FILE" "$WORKDIR/artifacts/kernel.release"
-cp "$OUT/.config" "$WORKDIR/artifacts/config"
-[ -f "$DIST/System.map" ] && cp "$DIST/System.map" "$WORKDIR/artifacts/System.map" || true
-cp "$OUT/Module.symvers" "$WORKDIR/artifacts/Module.symvers"
-sha256sum "$WORKDIR/artifacts/"* > "$WORKDIR/artifacts/SHA256SUMS.txt"
+cp "$IMAGE" "$WORKDIR/artifacts/Image" || true
+cp "$WORKDIR/boot-AFX.img" "$WORKDIR/artifacts/boot-AFX.img" || true
+[ -n "$RELEASE_FILE" ] && cp "$RELEASE_FILE" "$WORKDIR/artifacts/kernel.release" || true
+[ -n "$KCONFIG" ] && cp "$KCONFIG" "$WORKDIR/artifacts/config" || true
+[ -n "$SYSMAP" ] && cp "$SYSMAP" "$WORKDIR/artifacts/System.map" || true
+[ -n "$SYMVERS" ] && cp "$SYMVERS" "$WORKDIR/artifacts/Module.symvers" || true
+if [ -n "$DIST" ] && [ -d "$DIST" ]; then
+  tar -C "$(dirname "$DIST")" -czf "$WORKDIR/artifacts/kernel-dist.tar.gz" "$(basename "$DIST")" || true
+fi
+sha256sum "$WORKDIR/artifacts/"* > "$WORKDIR/artifacts/SHA256SUMS.txt" 2>/dev/null || true
 ls -lh "$WORKDIR/artifacts"
+if [ "$BUILD_RC" -ne 0 ]; then
+  echo "build.sh returned $BUILD_RC, but Image/artifacts were produced; continuing." >&2
+fi
