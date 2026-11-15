@@ -1,0 +1,60 @@
+name: Build AFX GKI vermeer latest 5.15 (lts)
+
+on:
+  workflow_dispatch:
+    inputs:
+      localversion:
+        description: "CONFIG_LOCALVERSION (uname -r = <latest> + this)"
+        type: string
+        default: "-a13-AFX+ChyMG-SM8550"
+      hostname:
+        description: "CONFIG_DEFAULT_HOSTNAME"
+        type: string
+        default: "SM8550"
+      boot_partition_size:
+        description: "boot.img size in bytes (factory boot partition is 100663296 = 96 MiB)"
+        type: string
+        default: "100663296"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: true
+
+      - name: Checkout build scripts and patches
+        uses: actions/checkout@v4
+
+      - name: Install host dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libelf-dev libncurses-dev cpio rsync \
+            python3 xz-utils zstd lz4 kmod dwarves patch git curl
+
+      - name: Build latest 5.15 kernel and boot.img
+        env:
+          LOCALVERSION_INPUT: ${{ github.event.inputs.localversion || '-a13-AFX+ChyMG-SM8550' }}
+          HOSTNAME_INPUT: ${{ github.event.inputs.hostname || 'SM8550' }}
+          BOOT_PARTITION_SIZE: ${{ github.event.inputs.boot_partition_size || '100663296' }}
+          COMMON_TAG: android13-5.15-lts
+        run: bash scripts/build-new.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: AFX-vermeer-latest-5.15-${{ github.run_number }}
+          path: artifacts/*
+          if-no-files-found: error
