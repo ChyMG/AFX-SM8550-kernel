@@ -6,7 +6,7 @@ on:
       localversion:
         description: "CONFIG_LOCALVERSION (uname -r = 5.15.194<this>)"
         type: string
-        default: "-AFX-MiSM8550"
+        default: "-a13-AFX+ChyMG-SM8550"
       hostname:
         description: "CONFIG_DEFAULT_HOSTNAME"
         type: string
@@ -50,7 +50,7 @@ jobs:
 
       - name: Build kernel and boot.img
         env:
-          LOCALVERSION_INPUT: ${{ github.event.inputs.localversion || '-AFX-MiSM8550' }}
+          LOCALVERSION_INPUT: ${{ github.event.inputs.localversion || '-a13-AFX+ChyMG-SM8550' }}
           HOSTNAME_INPUT: ${{ github.event.inputs.hostname || 'SM8550' }}
           BOOT_PARTITION_SIZE: ${{ github.event.inputs.boot_partition_size || '100663296' }}
           COMMON_TAG: ${{ github.event.inputs.common_tag || 'android13-5.15-2025-12_r1' }}
