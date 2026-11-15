@@ -1,4 +1,4 @@
-name: Build AFX GKI vermeer 5.15.194 (thin LTO, SukiSU+SUSFS+KPM)
+name: Build AFX GKI vermeer 5.15 (thin LTO, SukiSU+SUSFS+KPM)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ on:
         type: string
         default: "SM8550"
       common_tag:
-        description: "ACK common ref/tag: android13-5.15 = latest 5.15; android13-5.15-2025-12_r1 = known-good 5.15.194"
+        description: "ACK common ref/tag: android13-5.15 = latest 5.15; android13-5.15-2025-12_r1 = known-good 5.15.194; android13-5.15-2026-09_r4 = certified 5.15.211"
         type: string
         default: "android13-5.15-2025-12_r1"
       boot_partition_size:
