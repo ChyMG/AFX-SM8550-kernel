@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       localversion:
-        description: "CONFIG_LOCALVERSION (uname -r = 5.15.78<this>)"
+        description: "CONFIG_LOCALVERSION (uname -r = 5.15.194<this>)"
         type: string
         default: "-AFX-MiSM8550"
       hostname:
@@ -12,7 +12,7 @@ on:
         type: string
         default: "SM8550"
       common_tag:
-        description: "ACK common ref/tag (5.15.78: android13-5.15-2023-02_r1; 5.15.194: android13-5.15)"
+        description: "ACK common ref/tag (default android13-5.15-2025-12_r1 = 5.15.194)"
         type: string
         default: "android13-5.15-2025-12_r1"
       boot_partition_size:
