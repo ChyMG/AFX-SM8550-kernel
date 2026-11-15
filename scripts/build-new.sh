@@ -7,7 +7,7 @@ CLANG=$WORKDIR/prebuilts/clang/host/linux-x86/clang-r450784e
 LOCALVERSION_INPUT=${LOCALVERSION_INPUT:--AFX-MiSM8550}
 HOSTNAME_INPUT=${HOSTNAME_INPUT:-SM8550}
 BOOT_PARTITION_SIZE=${BOOT_PARTITION_SIZE:-100663296}
-COMMON_TAG=${COMMON_TAG:-android13-5.15-2023-02_r1}
+COMMON_TAG=${COMMON_TAG:-android13-5.15-2025-12_r1}
 
 step() { echo -e "\n\033[1;34m[$(date +%H:%M:%S)] $*\033[0m"; }
 
@@ -81,20 +81,6 @@ if 'VMA_PAD_START' in s and '#define VMA_PAD_START' not in s:
 open(p, 'w').write(s)
 PYVMA
 
-# Keep struct module identical to a BTF_MODULES=y build so module_layout CRC
-# still matches vendor modules, without paying for debug info in full LTO.
-python3 - "$COMMON/include/linux/module.h" <<'PYBTF'
-import sys, re
-p = sys.argv[1]
-s = open(p).read()
-# 5.15.194 has: btf_data_size + btf_data under this ifdef; older has only one.
-s2, n = re.subn(r'#ifdef CONFIG_DEBUG_INFO_BTF_MODULES\n((?:\t[^\n]*\n)+?)#endif\n', r'\1', s, count=1)
-if n:
-    open(p, 'w').write(s2)
-    print("module.h: made BTF fields unconditional")
-else:
-    print("module.h: BTF ifdef not found (already unconditional?)")
-PYBTF
 
 step "Integrate SukiSU-Ultra builtin (vendored de9bc7e6)"
 rm -rf "$COMMON/drivers/kernelsu"
@@ -115,16 +101,10 @@ CONFIG_KSU_SUSFS=y
 CONFIG_KALLSYMS=y
 CONFIG_KALLSYMS_ALL=y
 CONFIG_KPM=y
-# CONFIG_DEBUG_INFO is not set
-# CONFIG_DEBUG_INFO_BTF is not set
-# CONFIG_DEBUG_INFO_BTF_MODULES is not set
-CONFIG_LTO_CLANG_FULL=y
-# CONFIG_LTO_CLANG_THIN is not set
-# CONFIG_LTO_NONE is not set
-# CONFIG_KASAN is not set
-# CONFIG_KFENCE is not set
-# CONFIG_UBSAN is not set
-# CONFIG_KCSAN is not set
+CONFIG_DEBUG_INFO=y
+CONFIG_DEBUG_INFO_DWARF4=y
+CONFIG_DEBUG_INFO_BTF=y
+CONFIG_DEBUG_INFO_BTF_MODULES=y
 # CONFIG_TRIM_UNUSED_KSYMS is not set
 # CONFIG_UNUSED_KSYMS_WHITELIST is not set
 EOF
@@ -146,7 +126,7 @@ IN_KERNEL_MODULES=
 BUILD_INITRAMFS=0
 MODULES_ORDER=
 GKI_MODULES_LIST=
-LTO=full
+LTO=thin
 NDK_TRIPLE=
 HERMETIC_TOOLCHAIN=0
 BUILDTOOLS_PREBUILT_BIN=
@@ -168,7 +148,6 @@ step "Build GKI Image with build/build.sh (new build system)"
 mkdir -p "$WORKDIR/tmp"
 export TMPDIR="$WORKDIR/tmp"
 export LOCALVERSION=
-export MAKEFLAGS="-j4"
 set +e
 BUILD_CONFIG=common/build.config.gki.aarch64 \
 BUILD_CONFIG_FRAGMENTS=newbuild/configs/gki-build.fragment \
